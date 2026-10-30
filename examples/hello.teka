@@ -1,0 +1,9 @@
+// My first TekaLang program
+let name = "teka";
+print("hello, " + name + "!");
+
+fn square(n: int) -> int {
+    return n * n;
+}
+
+print("7 squared =", square(7));

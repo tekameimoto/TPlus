@@ -1,0 +1,30 @@
+import random
+
+class GuessingGame:
+    def __init__(self):
+        self.secret = random.randint(1, 100)
+        self.attempts = 7
+
+    def play(self):
+        print("Welcome to TekaLang!")
+        print("Guess a number from 1 to 100")
+
+        while self.attempts > 0:
+            guess = int(input("Guess: "))
+
+            if guess == self.secret:
+                print("You win!")
+                return
+
+            if guess < self.secret:
+                print("Too low!")
+            else:
+                print("Too high!")
+
+            self.attempts -= 1
+
+        print("Game over!")
+        print("Answer:", self.secret)
+
+game = GuessingGame()
+game.play()

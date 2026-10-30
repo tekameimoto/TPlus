@@ -1,0 +1,5 @@
+import random
+import math
+print(math.sqrt(144))
+print(math.pi)
+print(random.randint(7, 7))

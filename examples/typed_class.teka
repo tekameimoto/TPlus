@@ -1,0 +1,7 @@
+class Pos:
+    def __init__(self):
+        self.x = 4
+def make() -> Pos:
+    return Pos()
+p = make()
+print(p.x)

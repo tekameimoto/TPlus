@@ -1,0 +1,10 @@
+* text=auto
+*.bat text eol=crlf
+*.sh text eol=lf
+*.teka text eol=lf
+*.py text eol=lf
+*.kts text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.jar binary
+*.zip binary

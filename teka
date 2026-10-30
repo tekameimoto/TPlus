@@ -1,0 +1,13 @@
+#!/bin/sh
+# TekaLang: native compiler + release updater
+HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+if command -v python3.11 >/dev/null 2>&1; then
+  PYTHON=python3.11
+else
+  PYTHON=python3
+fi
+if [ "${1:-}" = "update" ]; then
+  shift
+  exec "$PYTHON" "$HERE/updater.py" "$@"
+fi
+exec "$PYTHON" "$HERE/teka.py" "$@"

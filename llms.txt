@@ -1,0 +1,14 @@
+# T+ (TekaLang)
+
+> Official source and documentation for T+, an English-style, statically typed programming language that compiles through C++17. Version 0.9.0 uses .teka source files and the teka CLI.
+
+## Documentation
+
+- [Quick reference](https://github.com/tekameimoto/TPlus/blob/main/LANGUAGE.md): Syntax, a complete program, and limits.
+- [Handbook](https://github.com/tekameimoto/TPlus/blob/main/TPLUS_HANDBOOK.md): Implemented syntax and standard library signatures.
+- [Installation](https://github.com/tekameimoto/TPlus/blob/main/README.md): macOS, Linux, Windows, and updates.
+- [Examples](https://github.com/tekameimoto/TPlus/tree/main/examples): Example source programs.
+- [Tests](https://github.com/tekameimoto/TPlus/tree/main/tests): Compiler behavior and regression tests.
+- [Releases](https://github.com/tekameimoto/TPlus/releases): Versioned downloads.
+
+T+ is not Python. Python packages, arbitrary user imports, inheritance, async, and a package registry are not implemented. Use the handbook's implemented features, not its roadmap, when generating code. Validate programs with teka check.

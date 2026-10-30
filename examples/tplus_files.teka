@@ -1,0 +1,6 @@
+import teka.files
+import teka.json
+
+teka.files.write("tplus_example.txt", "hello from T+")
+say teka.files.exists("tplus_example.txt")
+say teka.json.quote(teka.files.read("tplus_example.txt"))

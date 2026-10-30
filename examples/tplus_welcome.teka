@@ -1,0 +1,13 @@
+import teka.random
+import teka.text
+import teka.time
+
+say "welcome to T+!"
+name = "coder"
+
+repeat 3 times:
+    number = teka.random.randint(1, 3)
+    if number is at least 2:
+        say teka.text.upper(name), number
+    otherwise:
+        say "hello", number

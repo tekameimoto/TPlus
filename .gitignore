@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IntelliJ / Gradle
+.idea/
+.gradle/
+.kotlin/
+.intellijPlatform/
+**/build/
+*.iml
+
+# Local environments and secrets
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+.DS_Store
+
+# Native build outputs
+*.o
+*.obj
+*.a
+*.dylib
+*.so
+*.dll
+*.exe
+
+# Editor and temporary files
+*.swp
+*.swo
+*~
+*.tmp
+
+# Local release payloads are uploaded separately to the GitHub release
+/release-assets/

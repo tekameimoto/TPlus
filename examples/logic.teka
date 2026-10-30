@@ -1,0 +1,14 @@
+fn is_even(n: int) -> bool {
+    return n % 2 == 0;
+}
+
+let message: string = "welcome";
+var x: int = 0;
+while x < 5 {
+    if is_even(x) and not (x == 4) {
+        print(message, x, "even");
+    } else {
+        print(message, x, "other");
+    }
+    x = x + 1;
+}

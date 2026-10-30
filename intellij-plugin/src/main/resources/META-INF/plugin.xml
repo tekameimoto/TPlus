@@ -1,0 +1,48 @@
+<idea-plugin>
+  <id>dev.teka.lang</id>
+  <name>T+</name>
+  <vendor>T+ Project</vendor>
+  <description><![CDATA[
+    T+ programming language for .teka files: highlighting, native runs, errors and offline completion.
+    Uses the T+ compiler installed in ~/.local/bin/teka.
+  ]]></description>
+  <depends>com.intellij.modules.platform</depends>
+  <extensions defaultExtensionNs="com.intellij">
+    <notificationGroup id="TekaLang Updates" displayType="BALLOON"/>
+    <postStartupActivity implementation="dev.teka.ide.TekaUpdateStartupActivity"/>
+    <fileType name="T+ File" implementationClass="dev.teka.ide.TekaFileType"
+              fieldName="INSTANCE" language="TekaLang" extensions="teka"/>
+    <lang.syntaxHighlighterFactory language="TekaLang"
+              implementationClass="dev.teka.ide.TekaHighlighterFactory"/>
+    <lang.parserDefinition language="TekaLang"
+              implementationClass="dev.teka.ide.TekaParserDefinition"/>
+    <externalAnnotator language="TekaLang"
+              implementationClass="dev.teka.ide.TekaExternalAnnotator"/>
+    <completion.contributor language="TekaLang"
+              implementationClass="dev.teka.ide.TekaCompletionContributor"/>
+    <inline.completion.provider implementation="dev.teka.ide.TekaInlineCompletionProvider"/>
+    <typedHandler implementation="dev.teka.ide.TekaAutoPopupHandler"/>
+    <fileTypeIndentOptionsProvider implementation="dev.teka.ide.TekaIndentOptionsProvider"/>
+    <configurationType implementation="dev.teka.ide.TekaRunConfigurationType"/>
+    <runConfigurationProducer implementation="dev.teka.ide.TekaRunConfigurationProducer"/>
+  </extensions>
+  <actions>
+    <action id="dev.teka.CheckUpdates" class="dev.teka.ide.CheckTekaUpdatesAction"
+            text="Check for T+ Updates" description="Check and install T+ releases">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+    <action id="dev.teka.OpenDocs" class="dev.teka.ide.OpenTPlusDocsAction"
+            text="Open T+ Handbook" description="Open the complete local T+ programming reference">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+    <action id="dev.teka.NewFile" class="dev.teka.ide.NewTekaFileAction"
+            text="T+ File" description="Create a new T+ source file">
+      <add-to-group group-id="NewGroup" anchor="first"/>
+    </action>
+    <action id="dev.teka.RunFile" class="dev.teka.ide.RunTekaAction"
+            text="Run T+ File" description="Compile and run a .teka program">
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+      <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+    </action>
+  </actions>
+</idea-plugin>

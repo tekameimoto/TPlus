@@ -1,0 +1,12 @@
+game_open('TekaLang native graphics smoke', 320, 200)
+while game_running() and game_time() < 0.45:
+	game_begin()
+	game_clear(12, 18, 32)
+	game_rect(15, 20, 80, 60, 30, 140, 200)
+	game_circle(150, 80, 30, 100, 80, 200)
+	game_line(20, 30, 250, 100, 3, 180, 230, 245)
+	game_triangle(190, 25, 170, 50, 210, 50, 240, 240, 200)
+	game_text('TekaLang / C++', 18, 150, 16, 230, 235, 250)
+	game_end()
+game_close()
+print('NATIVE_GRAPHICS_OK')

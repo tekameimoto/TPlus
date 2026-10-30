@@ -1,0 +1,18 @@
+// Functions, recursion, types, loops, conditions, immutable and mutable variables.
+fn fibonacci(n: int) -> int {
+    if n <= 1 {
+        return n;
+    } else {
+        return fibonacci(n - 1) + fibonacci(n - 2);
+    }
+}
+
+for i in 0..11 {
+    print("fib", i, "=", fibonacci(i));
+}
+
+var total = 0;
+for n in 1..6 {
+    total = total + n;
+}
+print("sum 1..5 =", total);

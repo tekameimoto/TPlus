@@ -1,0 +1,32 @@
+// TekaLang v0.2: collections, functions, dynamic lists and loop controls
+fn total(values: list<int>) -> int {
+    var result = 0;
+    for n in values {
+        result = result + n;
+    }
+    return result;
+}
+
+var numbers: list<int> = [10, 20, 30];
+push(numbers, 40);
+numbers[1] = 25;
+print("length", len(numbers));
+print("second", numbers[1]);
+print("sum", total(numbers));
+print("last", pop(numbers));
+print("remaining", len(numbers));
+
+var empty: list<string> = [];
+push(empty, "hello");
+push(empty, "teka");
+for item in empty {
+    print(item);
+}
+
+var count = 0;
+for x in 0..10 {
+    if x == 2 { continue; }
+    if x == 5 { break; }
+    count = count + x;
+}
+print("count", count);
