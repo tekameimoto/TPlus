@@ -1,31 +1,67 @@
 # T+ (TekaLang)
 
+**English-style syntax. Native executables.**
+
 [![Tests](https://github.com/tekameimoto/TPlus/actions/workflows/tests.yml/badge.svg)](https://github.com/tekameimoto/TPlus/actions/workflows/tests.yml)
+[![Release](https://img.shields.io/github/v/release/tekameimoto/TPlus)](https://github.com/tekameimoto/TPlus/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-T+ (TekaLang) is an open-source programming language with English-style commands that compiles to native executables through C++17.
+T+ is an experimental, statically typed programming language made by **Tekameimoto**. It is built for learning programming and writing small console programs, file utilities, and basic games.
 
-This is the official T+ compiler, standard library, documentation, and IntelliJ IDEA plugin.
-
-Write `.teka` files. Use `teka` to check, run, and compile them.
+Write a `.teka` file, then use `teka` to check, run, or build it. The compiler is written in Python; it translates T+ into C++17 and uses Clang or GCC to produce a native executable.
 
 ```teka
 repeat 3 times:
     say "hello from T+"
 ```
 
-[Language handbook](TPLUS_HANDBOOK.md) · [Quick language reference](LANGUAGE.md) · [Examples](examples) · [Releases](https://github.com/tekameimoto/TPlus/releases)
+[Install](#install) · [First program](#first-program) · [Language handbook](TPLUS_HANDBOOK.md) · [Examples](examples) · [Downloads](https://github.com/tekameimoto/TPlus/releases/latest)
+
+## What works in v0.9.0
+
+| Area | Available now |
+| --- | --- |
+| Language | Variables, static types, conditions, loops, typed functions, recursion, classes, and typed lists |
+| Console | Text output, input, strings, and numeric conversions |
+| Standard library | Math, random numbers, time, text operations, file access, and basic system information |
+| Compiler | Syntax/type checks, generated C++ output, and native executable builds |
+| Editor | IntelliJ IDEA plugin with highlighting, completion, diagnostics, and run actions |
+| Graphics | Basic raylib drawing and input on macOS |
+
+**Current limits:** no Python package imports, package registry, arbitrary user modules, dictionaries, sets, tuples, inheritance, async, or debugger. The JSON module currently provides string quoting, not a full JSON parser. T+ resembles Python in places but does not run general Python code.
+
+See the [handbook](TPLUS_HANDBOOK.md) for exact syntax and every implemented standard-library signature.
 
 ## Install
 
-**macOS · Linux · Windows**
+You need **Python 3.11 or newer** and a **C++17 compiler** to run or build T+ source. An already-built console executable does not need the T+ compiler or Python; its normal operating-system and runtime-library requirements still apply.
 
-Requires Python 3.11+ and a C++17 compiler.
+The commands below install **v0.9.0**. They download the release ZIP from GitHub and verify its SHA-256 checksum.
 
-> The one-command installers require the published v0.9.0 release. If no release is listed yet, use the source installation instructions below.
+### macOS
 
-### macOS and Linux
+Install Python 3.11+ from [python.org](https://www.python.org/downloads/macos/) if needed. Install Apple's command-line compiler tools:
 
-Copy this command into Terminal:
+```sh
+xcode-select --install
+```
+
+Then install T+:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tekameimoto/TPlus/main/get.sh | sh
+```
+
+### Linux
+
+On Ubuntu or Debian, install Python 3.11+ and GCC:
+
+```sh
+sudo apt update
+sudo apt install python3 g++
+```
+
+Check `python3 --version`: if your distribution provides an older Python, install Python 3.11+ before continuing. On other distributions, use the equivalent Python and C++ compiler packages.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/tekameimoto/TPlus/main/get.sh | sh
@@ -33,93 +69,106 @@ curl -fsSL https://raw.githubusercontent.com/tekameimoto/TPlus/main/get.sh | sh
 
 ### Windows
 
-Copy this command into PowerShell:
+1. Install [Python 3.11+](https://www.python.org/downloads/windows/).
+2. Install [MSYS2](https://www.msys2.org/). In **MSYS2 UCRT64**, run:
 
-```powershell
-irm https://raw.githubusercontent.com/tekameimoto/TPlus/main/get.ps1 | iex
-```
+   ```sh
+   pacman -S mingw-w64-ucrt-x86_64-gcc
+   ```
 
-Windows installs under `%LOCALAPPDATA%\TPlus` and adds `teka` to your user PATH. Open a new Terminal after installation.
+3. Add `C:\msys64\ucrt64\bin` to your Windows **user PATH**, then open a new PowerShell window.
+4. Install T+:
 
-### Compiler setup
+   ```powershell
+   irm https://raw.githubusercontent.com/tekameimoto/TPlus/main/get.ps1 | iex
+   ```
 
-On Windows, install [MSYS2](https://www.msys2.org/), open **MSYS2 UCRT64**, and run:
+Windows builds use MinGW-w64 GCC or Clang. Microsoft's `cl` compiler is not supported.
 
-```sh
-pacman -S mingw-w64-ucrt-x86_64-gcc
-```
+### Verify the installation
 
-Add `C:\msys64\ucrt64\bin` to your Windows user PATH, then reopen Terminal. T+ uses MinGW-w64 GCC or Clang; the MSVC `cl` command is not supported.
-
-The installer downloads v0.9.0, checks its SHA-256 checksum, and installs T+ in your home folder. It prints the PATH setup if needed. Administrator access is not required.
-
-On macOS, install the compiler tools with `xcode-select --install` if you haven't already. On Ubuntu or Debian, use `sudo apt install g++`.
-
-<details>
-<summary>Install from a ZIP or source</summary>
-
-Download **TPlus-v0.9.0.zip** from [Releases](https://github.com/tekameimoto/TPlus/releases), unzip it, and run this from the `compiler` folder:
+Open a new terminal, then run:
 
 ```sh
-sh install.sh
+teka --version
+teka doctor
 ```
 
-On macOS, you can also double-click `install.command`.
+The version should be `T+ 0.9.0`. `teka doctor` reports the compiler and native toolchain it finds.
 
-On Windows, run this from the extracted `compiler` folder:
+| System | Default compiler folder | Command |
+| --- | --- | --- |
+| macOS / Linux | `~/.local/share/teka/0.9.0` | `~/.local/bin/teka` |
+| Windows | `%LOCALAPPDATA%\TPlus\0.9.0` | `%LOCALAPPDATA%\TPlus\bin\teka.cmd` |
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
-```
-
-The execution policy flag applies only to that PowerShell process.
-
-To install from source:
+If macOS or Linux cannot find `teka`, add this to your shell configuration (`~/.zshrc` for zsh or `~/.bashrc` for bash), then reopen Terminal:
 
 ```sh
-git clone https://github.com/tekameimoto/TPlus.git
-cd TPlus
-sh install.sh
+export PATH="$HOME/.local/bin:$PATH"
 ```
-
-For a source checkout on Windows, run the same PowerShell installation command from the repository folder.
-
-On macOS and Linux, the default locations are `~/.local/share/teka/0.9.0` for the compiler and `~/.local/bin/teka` for the command. Choose a different location with `sh install.sh --prefix /your/path`.
-
-</details>
 
 ## First program
 
-Save this as `hello.teka`:
+Save the following as **`squares.teka`**. It defines a typed function, prints three squares, and writes a text file.
 
 ```teka
-say "hello from T+"
+import teka.files
+
+def square(value: int) -> int:
+    return value * value
+
+for number in range(1, 4):
+    say square(number)
+
+teka.files.write("result.txt", "Finished calculating squares.\n")
 ```
 
 Run it:
 
 ```sh
-teka run hello.teka
+teka run squares.teka
 ```
 
-| Command | What it does |
-| --- | --- |
-| `teka run hello.teka` | Compile and run |
-| `teka check hello.teka` | Check for errors |
-| `teka build hello.teka -o hello` | Build an executable |
-| `teka --version` | Show the installed version |
+Output:
 
-The [handbook](TPLUS_HANDBOOK.md) covers functions, lists, typed classes, and the standard library.
+```text
+1
+4
+9
+```
+
+The program also creates `result.txt` in the terminal's current directory. The file-writing function overwrites that file if it already exists.
+
+To build a standalone program:
+
+```sh
+teka build squares.teka -o squares
+```
+
+Run `./squares` on macOS/Linux or `.\squares.exe` in Windows PowerShell. Build on the operating system you intend to run it on; this is not a cross-compilation command.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `teka check squares.teka` | Check syntax and types without running |
+| `teka run squares.teka` | Compile and run |
+| `teka build squares.teka -o squares` | Produce a native executable |
+| `teka build squares.teka --release -o squares` | Build with optimization |
+| `teka emit-cpp squares.teka` | Show generated C++ |
+| `teka new MyProject` | Create a project with a source file, configuration, and tests |
+| `teka stdlib` | List implemented library functions |
+| `teka doctor` | Inspect the local installation and toolchain |
+
+Inside a generated project, `teka run` and `teka build` use the entry point in `teka.toml`.
 
 ## Update
-
-On macOS, Linux, and Windows:
 
 ```sh
 teka update
 ```
 
-This installs the latest published stable release from GitHub after checking the download's size and SHA-256 checksum. It updates an existing IntelliJ plugin when one is found; otherwise, it updates only the compiler. Restart IntelliJ after a plugin update.
+This installs the latest published stable release, checks its checksum, and keeps a local backup for rollback if installation fails. It updates an installed IntelliJ plugin when one is found. Restart IntelliJ after a plugin update.
 
 To check without installing:
 
@@ -127,41 +176,82 @@ To check without installing:
 teka update check
 ```
 
-The updater keeps a local backup and rolls back files if installation fails. It does not change your `.teka` projects. While releases are private drafts, the public updater will report that no published release is available.
-
 ## IntelliJ IDEA
 
-Download **TPlus-IntelliJ-v0.9.0.zip** from [Releases](https://github.com/tekameimoto/TPlus/releases). Open **Settings → Plugins → ⚙ → Install Plugin from Disk**, choose the ZIP, and restart.
+Requires **IntelliJ IDEA 2026.2 or newer** and an installed `teka` command.
 
-The plugin provides syntax highlighting, completion, diagnostics, and run actions for `.teka` files. Install the `teka` command first. Requires IntelliJ IDEA 2026.2 or newer.
+1. Download [TPlus-IntelliJ-v0.9.0.zip](https://github.com/tekameimoto/TPlus/releases/download/v0.9.0/TPlus-IntelliJ-v0.9.0.zip).
+2. Open **Settings → Plugins → ⚙ → Install Plugin from Disk**.
+3. Select the ZIP and restart IntelliJ.
+4. Open a `.teka` file to use highlighting, completion, diagnostics, and run actions.
 
-## Language status
+The compiler works from a terminal without an editor plugin.
 
-Version 0.9 supports console programs, functions, lists, typed classes, file access, and native `teka.*` modules. Console programs are intended for all three operating systems. Windows builds produce `.exe` files. Basic graphics are available on macOS with raylib installed (`brew install raylib`).
+## Troubleshooting
 
-Python packages, inheritance, async, and a debugger are not supported yet. The handbook lists the current syntax and limits.
+| Problem | What to check |
+| --- | --- |
+| `teka: command not found` | Reopen the terminal; on macOS/Linux, add `~/.local/bin` to PATH as shown above |
+| Python version error | Install Python 3.11+; the system's existing Python may be older |
+| Native compilation fails | Run `teka doctor`; confirm that Clang or GCC is installed and on PATH |
+| “Another command already exists” | The installer is protecting an existing launcher; use a different installation prefix below |
+| A Python import or feature fails | Check the handbook: T+ supports its own built-in modules and a subset of Python-like syntax |
+| A graphics program fails to build | Graphics currently require macOS and raylib: `brew install raylib` |
 
-## Development
+To install alongside an existing development launcher on macOS/Linux:
 
-Compiler tests:
+```sh
+curl -fsSL https://raw.githubusercontent.com/tekameimoto/TPlus/main/get.sh | sh -s -- --prefix "$HOME/.local/teka-release"
+```
+
+Use that installation directly with `"$HOME/.local/teka-release/bin/teka" --version`, or add its `bin` folder to PATH.
+
+<details>
+<summary>Install from a ZIP or source checkout</summary>
+
+Download [TPlus-v0.9.0.zip](https://github.com/tekameimoto/TPlus/releases/download/v0.9.0/TPlus-v0.9.0.zip), extract it, and open the `compiler` folder.
+
+On macOS/Linux:
+
+```sh
+sh install.sh
+```
+
+On Windows:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+That execution-policy setting applies only to the current PowerShell process.
+
+For a source checkout:
+
+```sh
+git clone https://github.com/tekameimoto/TPlus.git
+cd TPlus
+```
+
+Run the appropriate installer above from the repository folder. Source checkouts follow `main`; release ZIPs are versioned snapshots.
+
+</details>
+
+## Development and support
+
+Compiler tests require Python 3.11+ and a C++17 compiler:
 
 ```sh
 python3 -m unittest discover -s tests -v
 ```
 
-IntelliJ plugin tests (Java 25):
+On Windows, use `python` if that is your Python command. IntelliJ plugin development requires Java 25; run `./gradlew test` from `intellij-plugin` (`gradlew.bat test` on Windows).
 
-```sh
-cd intellij-plugin
-./gradlew test
-```
+GitHub Actions tests the compiler and installers on macOS, Linux, and Windows, plus the IntelliJ plugin on Linux. Optional graphics checks depend on local raylib availability.
 
-GitHub Actions runs both suites on pushes and pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md) for bug reports and pull requests.
+[Report a bug](https://github.com/tekameimoto/TPlus/issues) with the version, operating system, command, error output, and a small reproducing program. See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions.
 
-## Privacy
+## License and privacy
 
-Downloads and update checks use GitHub. T+ does not use the developer's computer as a server, and it does not send project source, local file paths, or device identifiers with update requests. See [PRIVACY.md](PRIVACY.md) for details.
+MIT licensed. See [LICENSE](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md).
 
-## License
-
-T+ is licensed under [MIT](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for bundled build tooling.
+Compilation and editor diagnostics run locally. Installers and updates download from GitHub; they do not upload project source or use the developer's computer as a server. See [PRIVACY.md](PRIVACY.md) for network and local-file details.
