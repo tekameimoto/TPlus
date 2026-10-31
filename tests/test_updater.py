@@ -267,6 +267,64 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual((self.root / "teka.py").read_bytes(), old)
         self.assertTrue((self.plugin / "old.jar").exists())
 
+    def test_invalid_config_is_a_controlled_cli_error(self):
+        manager = Updater(self.root, self.plugin, self.config)
+        for value in ([], None, 1, {"feed_url": 123}, {"feed_url": []},
+                      {"feed_url": "https:///missing-host"},
+                      {"feed_url": "https://user:password@example.com/feed"}):
+            with self.subTest(value=value):
+                self.config.write_text(json.dumps(value))
+                output = io.StringIO()
+                with patch("updater.Updater", return_value=manager), redirect_stdout(output):
+                    self.assertEqual(updater.cli(["status", "--json"]), 1)
+                self.assertFalse(json.loads(output.getvalue())["ok"])
+
+    def test_local_feed_rejects_windows_path_syntax(self):
+        self.write_release()
+        original = json.loads(self.feed.read_text())
+        for name in ("..\\outside.zip", "C:outside.zip", "dir\\release.zip"):
+            with self.subTest(name=name):
+                self.feed.write_text(json.dumps({**original, "asset": name}))
+                with self.assertRaisesRegex(UpdateError, "Local update filenames"):
+                    self.m.check()
+
+    def test_plugin_archive_rejects_unsafe_and_duplicate_members(self):
+        for name in ("TekaLang-IntelliJ/..\\outside", "TekaLang-IntelliJ/C:payload",
+                     "TekaLang-IntelliJ/../outside", "TekaLang-IntelliJ/lib/./extra.jar",
+                     "TekaLang-IntelliJ/lib/TekaLang-IntelliJ-0.4.0.jar"):
+            with self.subTest(name=name):
+                plugin = io.BytesIO(self.plugin_bytes())
+                import warnings
+                with warnings.catch_warnings(), zipfile.ZipFile(plugin, "a") as archive:
+                    warnings.simplefilter("ignore", UserWarning)
+                    archive.writestr(name, b"extra")
+                self.write_release(alter=lambda files: files.update({"plugin/TekaLang-IntelliJ.zip": plugin.getvalue()}))
+                with self.assertRaises(UpdateError):
+                    self.m.install()
+                self.assertEqual((self.root / "teka.py").read_text(), "VERSION = '0.3.0'\n")
+                self.assertFalse((self.root / "backups").exists())
+
+    def test_missing_plugin_descriptor_is_controlled_error(self):
+        jar = io.BytesIO()
+        with zipfile.ZipFile(jar, "w") as archive:
+            archive.writestr("other.txt", "no descriptor")
+        plugin = io.BytesIO()
+        with zipfile.ZipFile(plugin, "w") as archive:
+            archive.writestr("TekaLang-IntelliJ/lib/TekaLang-IntelliJ-0.4.0.jar", jar.getvalue())
+        blob = self.write_release(alter=lambda files: files.update({"plugin/TekaLang-IntelliJ.zip": plugin.getvalue()}))
+        with self.assertRaises(UpdateError):
+            validate_bundle(blob, "0.4.0")
+
+    def test_nested_plugin_unpacked_size_limit(self):
+        plugin = io.BytesIO(self.plugin_bytes())
+        with zipfile.ZipFile(plugin, "a", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("TekaLang-IntelliJ/lib/one", b"x" * 1500)
+            archive.writestr("TekaLang-IntelliJ/lib/two", b"x" * 1500)
+        blob = self.write_release(alter=lambda files: files.update({"plugin/TekaLang-IntelliJ.zip": plugin.getvalue()}))
+        with patch("updater.MAX_UNPACKED_BYTES", 2500):
+            with self.assertRaisesRegex(UpdateError, "unpack"):
+                validate_bundle(blob, "0.4.0")
+
 
 if __name__ == "__main__":
     unittest.main()

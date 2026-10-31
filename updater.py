@@ -103,6 +103,14 @@ def read_limited(source, maximum: int) -> bytes:
 
 
 def validate_bundle(data: bytes, version: str) -> dict[str, bytes]:
+    """Reject corrupt or unsafe archives before touching an installation."""
+    try:
+        return _validate_bundle(data, version)
+    except (zipfile.BadZipFile, KeyError, UnicodeError, RuntimeError, NotImplementedError) as exc:
+        raise UpdateError('Invalid update archive or plugin descriptor') from exc
+
+
+def _validate_bundle(data: bytes, version: str) -> dict[str, bytes]:
     try:
         archive = zipfile.ZipFile(io.BytesIO(data), "r")
     except zipfile.BadZipFile as exc:
@@ -135,20 +143,32 @@ def validate_bundle(data: bytes, version: str) -> dict[str, bytes]:
         plugin = files["plugin/TekaLang-IntelliJ.zip"]
         try:
             with zipfile.ZipFile(io.BytesIO(plugin)) as pzip:
-                names = pzip.namelist()
+                entries = pzip.infolist()
+                names = [entry.filename for entry in entries]
                 jar = f"TekaLang-IntelliJ/lib/TekaLang-IntelliJ-{version}.jar"
                 if jar not in names:
                     raise UpdateError("Wrong plugin version in release bundle")
-                for name in names:
+                seen = set()
+                for info in entries:
+                    name = info.filename
                     path = PurePosixPath(name)
-                    if path.is_absolute() or ".." in path.parts or not name.startswith("TekaLang-IntelliJ/"):
+                    if (path.is_absolute() or ".." in path.parts or "\\" in name or ":" in name
+                            or name.rstrip("/") != path.as_posix()
+                            or not name.startswith("TekaLang-IntelliJ/")):
                         raise UpdateError("Unsafe IntelliJ plugin archive")
-                    info = pzip.getinfo(name)
+                    if name in seen:
+                        raise UpdateError("Duplicate IntelliJ plugin archive member")
+                    seen.add(name)
                     if info.file_size > MAX_MEMBER_BYTES:
                         raise UpdateError("Plugin file exceeds size limit")
+                    total += info.file_size
+                    if total > MAX_UNPACKED_BYTES:
+                        raise UpdateError("Plugin bundle would unpack too much data")
                     if ((info.external_attr >> 16) & 0o170000) == stat.S_IFLNK:
                         raise UpdateError("Plugin symlinks are not allowed")
                 with zipfile.ZipFile(io.BytesIO(pzip.read(jar))) as actual_jar:
+                    if actual_jar.getinfo("META-INF/plugin.xml").file_size > MAX_FEED_BYTES:
+                        raise UpdateError("Plugin descriptor exceeds size limit")
                     descriptor = actual_jar.read("META-INF/plugin.xml").decode("utf-8")
                     if "<id>dev.teka.lang</id>" not in descriptor or f"<version>{version}</version>" not in descriptor:
                         raise UpdateError("IntelliJ plugin identity or version does not match the release")
@@ -210,10 +230,15 @@ class Updater:
             return self.feed_override
         try:
             data = json.loads(self.config_path.read_text("utf-8"))
+            if not isinstance(data, dict):
+                raise UpdateError("Update source configuration must be a JSON object")
             remote = data.get("feed_url")
+            if remote is not None and not isinstance(remote, str):
+                raise UpdateError("Configured update feed must be an HTTPS URL or null")
             if remote:
-                if urlparse(remote).scheme != "https":
-                    raise UpdateError("Configured remote update feed must be HTTPS")
+                parsed = urlparse(remote)
+                if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+                    raise UpdateError("Configured remote update feed must be a valid HTTPS URL without credentials")
                 return remote
         except FileNotFoundError:
             pass
@@ -261,11 +286,11 @@ class Updater:
             raise UpdateError("Release feed is missing the ZIP asset")
         if not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", checksum):
             raise UpdateError("Release checksum must be SHA-256")
-        if not isinstance(size, int) or not 0 < size <= MAX_BUNDLE_BYTES:
+        if type(size) is not int or not 0 < size <= MAX_BUNDLE_BYTES:
             raise UpdateError("Invalid release archive size")
         if isinstance(feed, Path):
             # For local feeds, ZIP must remain alongside the manifest.
-            if asset.startswith("/") or ".." in PurePosixPath(asset).parts or "/" in asset:
+            if asset in {".", ".."} or any(char in asset for char in ("/", "\\", ":", "\0")):
                 raise UpdateError("Local update filenames must be alongside the feed")
             archive_source = feed.parent / asset
         else:

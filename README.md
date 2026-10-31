@@ -6,7 +6,7 @@
 [![Release](https://img.shields.io/github/v/release/tekameimoto/TPlus)](https://github.com/tekameimoto/TPlus/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-T+ is an experimental, statically typed programming language made by **Tekameimoto**. It is built for learning programming and writing small console programs, file utilities, and basic games.
+T+ is an experimental, statically typed, general-purpose programming language made by **Tekameimoto**. Today it supports console programs, file utilities, and optional raylib graphics. Networking, databases, user-created modules, and package management are planned; they are not available in v0.9.0.
 
 Write a `.teka` file, then use `teka` to check, run, or build it. The compiler is written in Python; it translates T+ into C++17 and uses Clang or GCC to produce a native executable.
 
@@ -162,6 +162,14 @@ Run `./squares` on macOS/Linux or `.\squares.exe` in Windows PowerShell. Build o
 
 Inside a generated project, `teka run` and `teka build` use the entry point in `teka.toml`.
 
+```sh
+teka new MyProject
+cd MyProject
+teka run
+```
+
+Edit `src/main.teka` to change the program. The generated `tests/test_main.teka` is a sample program you can run with `teka run tests/test_main.teka`; there is no `teka test` runner yet.
+
 ## Update
 
 ```sh
@@ -169,6 +177,8 @@ teka update
 ```
 
 This installs the latest published stable release, checks its checksum, and keeps a local backup for rollback if installation fails. It updates an installed IntelliJ plugin when one is found. Restart IntelliJ after a plugin update.
+
+Updates currently replace files inside the existing installation directory. The directory name may therefore reflect the version originally installed; use `teka --version` to see the running compiler version. A checksum checks file integrity, not independent publisher authentication.
 
 To check without installing:
 
@@ -234,6 +244,8 @@ cd TPlus
 
 Run the appropriate installer above from the repository folder. Source checkouts follow `main`; release ZIPs are versioned snapshots.
 
+The source installers derive their version from `teka.py`. On Windows, `install.ps1 -Prefix 'C:\Tools\TPlus' -NoPath` installs into a custom folder without changing PATH; invoke that folder's `bin\teka.cmd` directly. The download commands above remain pinned to the published v0.9.0 release.
+
 </details>
 
 ## Development and support
@@ -249,6 +261,8 @@ On Windows, use `python` if that is your Python command. IntelliJ plugin develop
 GitHub Actions tests the compiler and installers on macOS, Linux, and Windows, plus the IntelliJ plugin on Linux. Optional graphics checks depend on local raylib availability.
 
 [Report a bug](https://github.com/tekameimoto/TPlus/issues) with the version, operating system, command, error output, and a small reproducing program. See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions.
+
+See the [development roadmap](docs/DEVELOPMENT_ROADMAP.md) for the implementation order and [stabilization audit](docs/STABILIZATION_AUDIT.md) for tested behavior, known gaps, and release boundaries.
 
 ## License and privacy
 

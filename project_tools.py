@@ -8,6 +8,7 @@ import re
 import shutil
 import sys
 import tomllib
+from standard_modules import MODULES
 
 
 class ProjectError(Exception):
@@ -44,10 +45,10 @@ def create_project(path: str) -> Path:
         )
         (root / "src" / "main.teka").write_text(
             "# First program in T+\n"
-            f"print('hello from {name}!')\n", encoding="utf-8",
+            f"say 'hello from {name}!'\n", encoding="utf-8",
         )
         (root / "tests" / "test_main.teka").write_text(
-            "print('T+ test program runs')\n", encoding="utf-8",
+            "say 'T+ test program runs'\n", encoding="utf-8",
         )
         (root / "README.md").write_text(
             f"# {name}\n\n"
@@ -100,9 +101,9 @@ def doctor(installed_root: Path) -> dict:
         "cpp_compiler": compiler,
         "cpp_available": bool(compiler),
         "raylib_headers": str(include) if include else None,
-        "graphics_available": bool(include),
+        "graphics_available": sys.platform == "darwin" and bool(include) and bool(compiler),
         "intellij_plugin": sorted(plugin_versions),
         "root": str(installed_root),
-        "stdlib": ["math", "random"],
+        "stdlib": sorted(MODULES),
         "status": "ready" if sys.version_info >= (3, 11) and compiler else "incomplete",
     }
