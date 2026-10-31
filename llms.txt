@@ -12,3 +12,5 @@
 - [Releases](https://github.com/tekameimoto/TPlus/releases): Versioned downloads.
 
 T+ is not Python. Python packages, arbitrary user imports, inheritance, async, and a package registry are not implemented. Use the handbook's implemented features, not its roadmap, when generating code. Validate programs with teka check.
+
+- Development roadmap (planned, not available APIs): https://github.com/tekameimoto/TPlus/blob/main/docs/DEVELOPMENT_ROADMAP.md

@@ -407,6 +407,8 @@ The generated teka.toml identifies the project, version and source entry. Run `t
 
 ## 13. Roadmap (not implemented in v0.9)
 
+See [DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md) for the phased implementation sequence and acceptance criteria.
+
 Full Python collections/syntax, arbitrary user modules, package installer and registry, complete JSON parser/serializer, memory and threading APIs, graphics sprites/audio/3D, robust project-wide semantic indexing, formatting/refactoring, debugger, multi-error recovery.
 
 **Never confuse planned features with working commands.**

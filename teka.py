@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -1077,6 +1078,8 @@ def compile_source(source):
         if exc.line in prefixes:
             exc.column = max(1, exc.column - prefixes[exc.line])
         raise
+    except RecursionError as exc:
+        raise TekaError('Expression or block nesting exceeds the compiler limit. Split it into smaller expressions or functions.', code='E401') from exc
 
 def locate_cpp(requested=None):
     if requested: return requested
@@ -1190,11 +1193,21 @@ def main(argv=None):
         if args.command == 'build':
             if path is None and not args.output:
                 raise TekaError('Building stdin requires -o OUTPUT')
-            output = Path(args.output or path.with_suffix('.exe' if sys.platform == 'win32' else '')).resolve()
+            output = Path(args.output or path.with_suffix('.exe' if sys.platform == 'win32' else '')).absolute()
+            if output.suffix.lower() == '.teka':
+                raise TekaError('Build output must not overwrite a .teka source file')
             if sys.platform == 'win32' and output.suffix.lower() != '.exe':
                 output = output.with_name(output.name + '.exe')
-        with tempfile.TemporaryDirectory(prefix='tekalang-') as tmp:
-            executable = output if args.command == 'build' else Path(tmp) / ('app.exe' if sys.platform == 'win32' else 'app')
+            if output.is_symlink():
+                raise TekaError('Build output must not be a symbolic link')
+            if path is not None and output.exists() and output.samefile(path):
+                raise TekaError('Build output must not overwrite the source file')
+            output = output.resolve()
+        # Stage beside the requested output so the final rename stays on the
+        # same filesystem. A failed compiler/linker cannot truncate an old build.
+        build_directory = output.parent if args.command == 'build' else None
+        with tempfile.TemporaryDirectory(prefix='tekalang-', dir=build_directory) as tmp:
+            executable = Path(tmp) / ('app.exe' if sys.platform == 'win32' else 'app')
             optimization = '-O3' if getattr(args, 'release', False) else '-O2'
             command = [cxx, '-std=c++17', optimization, '-x', 'c++', '-', '-o', str(executable)]
             if '#include "raylib.h"' in cpp:
@@ -1210,7 +1223,8 @@ def main(argv=None):
                 summary = '\n'.join(compiled.stderr.splitlines()[:10])
                 raise TekaError('Native C++ backend failed.\n' + summary)
             if args.command == 'build':
-                print('Built ' + str(executable))
+                os.replace(executable, output)
+                print('Built ' + str(output))
                 return 0
             return subprocess.run([str(executable)]).returncode
     except (TekaError, ProjectError, FileNotFoundError, UnicodeDecodeError, OSError) as exc:
