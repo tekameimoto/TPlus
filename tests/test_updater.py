@@ -327,7 +327,9 @@ class UpdaterTests(unittest.TestCase):
 
     def managed_installation(self):
         from project_tools import record_install
-        prefix = self.base / "managed"
+        # Match the installer, which canonicalizes the prefix before recording
+        # ownership (macOS temporary directories can be reached through /var).
+        prefix = self.base.resolve() / "managed"
         root = prefix / "share/teka/0.3.0"
         root.parent.mkdir(parents=True)
         self.root.rename(root)
