@@ -18,6 +18,8 @@ Highlighting, completion, and diagnostics run locally. The plugin invokes your l
 
 Installation creates the T+ program files and command launcher. Updates keep backups within the T+ installation folder so files can be restored if an update fails. Windows installation adds the launcher folder to the current user's PATH.
 
+Current source installers also create a local ownership record containing relative filenames, content hashes, and the installation layout. It contains no account, device identifier, or network address and is not uploaded. It lets uninstall preserve unrecognized or edited files. Uninstall leaves PATH entries, editor plugins, projects, and update backups alone.
+
 Compiler diagnostics may show paths on the computer where the command runs. Those diagnostics are printed locally; T+ does not upload them.
 
 ## Programs you run

@@ -334,6 +334,14 @@ class Updater:
             raise UpdateError("Update archive checksum mismatch; nothing was installed")
         files = validate_bundle(blob, release["version"])
 
+        ownership = None
+        if (self.root / ".tplus-install.json").exists() or (self.root / ".tplus-install.json").is_symlink():
+            from project_tools import prepare_update, record_update, atomic_record, InstallationError
+            try:
+                ownership = prepare_update(self.root, [name for name in ALL_COMPILER if f"compiler/{name}" in files])
+            except InstallationError as exc:
+                raise UpdateError(str(exc)) from exc
+
         # Keep old sources and IntelliJ plugin so a failed transaction can roll back.
         backups = self.root / "backups" / "updates"
         backups.mkdir(parents=True, exist_ok=True)
@@ -381,6 +389,8 @@ class Updater:
             finally:
                 for staging in staged_files.values():
                     staging.unlink(missing_ok=True)
+            if ownership is not None:
+                record_update(self.root, ownership, list(staged_files))
         except Exception as exc:
             for name in modified:
                 dest = self.root / name
@@ -395,6 +405,10 @@ class Updater:
                 shutil.rmtree(self.plugin_dir)
             if moved_plugin and saved_plugin.is_dir():
                 shutil.move(str(saved_plugin), str(self.plugin_dir))
+            if ownership is not None:
+                from project_tools import read_record
+                if read_record(self.root) != ownership:
+                    atomic_record(self.root, ownership)
             raise UpdateError(f"Update rolled back: {exc}") from exc
         finally:
             shutil.rmtree(stage, ignore_errors=True)

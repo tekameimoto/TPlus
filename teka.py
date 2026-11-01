@@ -1110,6 +1110,9 @@ def main(argv=None):
     doctor_cmd = subs.add_parser('doctor', help='Check the compiler and native toolchain')
     doctor_cmd.add_argument('--json', action='store_true')
     subs.add_parser('docs', help='Show the local T+ Handbook path')
+    uninstall_cmd = subs.add_parser('uninstall', help='Preview removal of this managed installation')
+    uninstall_cmd.add_argument('--yes', action='store_true', help='Remove unchanged files owned by this installation')
+    uninstall_cmd.add_argument('--json', action='store_true')
     lib_cmd = subs.add_parser('stdlib', help='List every built-in T+ native module and function')
     lib_cmd.add_argument('--json', action='store_true')
     for action in ['run','build','check','emit-cpp']:
@@ -1127,6 +1130,29 @@ def main(argv=None):
     filename = getattr(args, 'file', None) or '<stdin>'
     json_out = bool(getattr(args, 'json', False))
     try:
+        if args.command == 'uninstall':
+            try:
+                from project_tools import uninstall, InstallationError
+            except ImportError as exc:
+                raise TekaError('Uninstall support is missing. Reinstall from a current source distribution.') from exc
+            try:
+                result = uninstall(Path(__file__).resolve().parent, args.yes)
+            except InstallationError as exc:
+                raise TekaError(str(exc)) from exc
+            if json_out:
+                print(json.dumps(result))
+            else:
+                print('Uninstall preview:' if result['preview'] else 'Removed owned T+ files:')
+                for item in result['remove']:
+                    print('  ' + item)
+                if result['preserved']:
+                    print('Preserved modified or unowned files:')
+                    for item in result['preserved']:
+                        print('  ' + item)
+                print('PATH entries and editor plugins were left unchanged.')
+                if result['preview']:
+                    print('Run teka uninstall --yes to apply.')
+            return 0
         if args.command == 'new':
             root = create_project(args.name)
             print('Created T+ project: ' + str(root))
