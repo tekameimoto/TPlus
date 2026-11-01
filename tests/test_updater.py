@@ -325,6 +325,56 @@ class UpdaterTests(unittest.TestCase):
             with self.assertRaisesRegex(UpdateError, "unpack"):
                 validate_bundle(blob, "0.4.0")
 
+    def managed_installation(self):
+        from project_tools import record_install
+        # Match the installer, which canonicalizes the prefix before recording
+        # ownership (macOS temporary directories can be reached through /var).
+        prefix = self.base.resolve() / "managed"
+        root = prefix / "share/teka/0.3.0"
+        root.parent.mkdir(parents=True)
+        self.root.rename(root)
+        self.root = root
+        self.feed = root / "releases/stable.json"
+        self.m = Updater(root, self.plugin, self.config, feed_override=self.feed)
+        (prefix / "bin").mkdir()
+        (prefix / "bin/teka").write_text("managed launcher")
+        record_install(root, "posix", ["teka.py", "teka"])
+
+    def test_managed_update_refreshes_ownership_for_uninstall(self):
+        from project_tools import uninstall
+        self.managed_installation()
+        self.write_release()
+        self.m.install()
+        result = uninstall(self.root)
+        self.assertIn(str(self.root / "teka.py"), result["remove"])
+        self.assertIn(str(self.root / "standard_modules.py"), result["remove"])
+        uninstall(self.root, apply=True)
+        self.assertFalse((self.root / "teka.py").exists())
+        self.assertTrue((self.root / "backups").exists())
+
+    def test_managed_update_preserves_local_edits(self):
+        self.managed_installation()
+        self.write_release()
+        compiler = self.root / "teka.py"
+        compiler.write_text("VERSION = '0.3.0'\n# local edits\n")
+        with self.assertRaisesRegex(UpdateError, "modified"):
+            self.m.install()
+        self.assertIn("local edits", compiler.read_text())
+        self.assertFalse((self.root / "backups").exists())
+
+    def test_ownership_write_failure_rolls_back_update(self):
+        from project_tools import read_record
+        self.managed_installation()
+        self.write_release()
+        before = (self.root / "teka.py").read_bytes()
+        record = read_record(self.root)
+        with patch("project_tools.atomic_record", side_effect=OSError("simulated ownership write failure")):
+            with self.assertRaisesRegex(UpdateError, "rolled back"):
+                self.m.install()
+        self.assertEqual((self.root / "teka.py").read_bytes(), before)
+        self.assertEqual(read_record(self.root), record)
+        self.assertTrue((self.plugin / "old.jar").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

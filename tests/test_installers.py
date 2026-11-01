@@ -89,6 +89,47 @@ class InstallerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.prefix.exists())
 
+    def test_uninstall_cli_previews_then_removes_only_owned_files(self):
+        result = self.install()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        root = self.installed_root(current_version(ROOT))
+        project = root / "my-project.teka"
+        project.write_text('say "keep me"')
+        command = [sys.executable, str(root / "teka.py"), "uninstall", "--json"]
+        preview = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        self.assertEqual(preview.returncode, 0, preview.stdout + preview.stderr)
+        self.assertTrue(json.loads(preview.stdout)["preview"])
+        self.assertTrue(self.launcher.exists())
+        applied = subprocess.run(command + ["--yes"], capture_output=True, text=True, timeout=20)
+        self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
+        self.assertFalse(json.loads(applied.stdout)["preview"])
+        self.assertFalse(self.launcher.exists())
+        self.assertEqual(project.read_text(), 'say "keep me"')
+
+    def test_reinstall_preserves_modified_compiler(self):
+        first = self.install()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        compiler = self.installed_root(current_version(ROOT)) / "teka.py"
+        compiler.write_text("# locally modified")
+        result = self.install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(compiler.read_text(), "# locally modified")
+
+    def test_install_refuses_symlinked_owned_file(self):
+        first = self.install()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        compiler = self.installed_root(current_version(ROOT)) / "teka.py"
+        target = self.base / "unrelated.py"
+        target.write_text("keep me")
+        compiler.unlink()
+        try:
+            compiler.symlink_to(target)
+        except OSError:
+            self.skipTest("Symlinks unavailable")
+        result = self.install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(target.read_text(), "keep me")
+
 
 if __name__ == "__main__":
     unittest.main()

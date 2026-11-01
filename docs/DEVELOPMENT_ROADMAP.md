@@ -24,6 +24,8 @@ Follow-up stabilization work must use separate reproductions and tests: precise 
 
 ## B — Distribution
 
+First implementation: [installation ownership and removal](INSTALLATION_LIFECYCLE.md). It adds guarded reinstall/update and preview-first uninstall while preserving legacy update bundle filenames. Full transaction recovery and release packaging remain follow-up PRs.
+
 1. Define one release-version contract across compiler, plugin build, packaging, and download scripts. Keep the published v0.9.0 installers reproducible until a successor is approved.
 2. Design a shared installation manifest and explicit upgrade/rollback policy. Test power loss, partial writes, permissions, existing launchers, symlinks, and paths with spaces. An in-place update currently keeps the original directory name.
 3. Add safe uninstall limited to owned files. Preserve project files and unrelated PATH entries.

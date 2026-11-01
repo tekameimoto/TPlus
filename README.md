@@ -186,6 +186,24 @@ To check without installing:
 teka update check
 ```
 
+### Uninstall a source-installed version
+
+The current source installers record the files they own. Preview removal first:
+
+```sh
+teka uninstall
+```
+
+Then apply it:
+
+```sh
+teka uninstall --yes
+```
+
+Only unchanged, recorded files are removed. Edited files, projects, update backups, other installed versions, editor plugins, and PATH entries are preserved. Removing an older version does not remove a newer version's launcher.
+
+This command is **not included in the published v0.9.0 downloads**. Source checkouts and legacy installations without ownership records are never automatically deleted. See [installation lifecycle](docs/INSTALLATION_LIFECYCLE.md) for migration and recovery limits.
+
 ## IntelliJ IDEA
 
 Requires **IntelliJ IDEA 2026.2 or newer** and an installed `teka` command.
