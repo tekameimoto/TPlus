@@ -39,44 +39,15 @@ import sys
 
 source = Path(sys.argv[1]).resolve()
 prefix = Path(sys.argv[2]).expanduser().resolve()
-launcher = prefix / "bin" / "teka"
-required = ["teka.py", "python_style.py", "standard_modules.py", "project_tools.py", "updater.py", "TPLUS_HANDBOOK.md"]
-missing = [name for name in required if not (source / name).is_file()]
-if missing:
-    sys.exit("Incomplete T+ folder: missing " + ", ".join(missing))
 sys.path.insert(0, str(source))
+from project_tools import install_local, InstallationError
 from updater import current_version, UpdateError
 try:
-    version = current_version(source)
-except UpdateError as exc:
-    sys.exit(str(exc))
-destination = prefix / "share" / "teka" / version
-from project_tools import preflight, record_install, InstallationError
-installed = [name for name in required + ["README.md", "LICENSE", "PRIVACY.md", "install.sh", "install.command"] if (source / name).is_file()]
-try:
-    preflight(destination, "posix", installed + [".tplus-install"])
-except InstallationError as exc:
-    sys.exit(str(exc))
-if launcher.exists() or launcher.is_symlink():
-    if launcher.is_symlink() or not launcher.is_file() or "# TPlus launcher" not in launcher.read_text(errors="replace"):
-        sys.exit(f"Another command already exists at {launcher}. Use --prefix to choose another folder.")
-if destination.exists() and not (destination / ".tplus-install").is_file():
-    sys.exit(f"{destination} already exists and is not marked as a T+ installation. Choose another --prefix.")
-destination.mkdir(parents=True, exist_ok=True)
-for name in installed:
-    if (source / name).is_file() and (source / name).resolve() != (destination / name).resolve():
-        shutil.copy2(source / name, destination / name)
-(destination / ".tplus-install").write_text(f"T+ {version}\n", encoding="utf-8")
-launcher.parent.mkdir(parents=True, exist_ok=True)
-python = shlex.quote(sys.executable)
-compiler = shlex.quote(str(destination / "teka.py"))
-updater = shlex.quote(str(destination / "updater.py"))
-launcher.write_text(f'#!/bin/sh\n# TPlus launcher\nif [ "${{1:-}}" = update ]; then\n  shift\n  exec {python} {updater} "$@"\nfi\nexec {python} {compiler} "$@"\n')
-launcher.chmod(0o755)
-try:
-    record_install(destination, "posix", installed + [".tplus-install"])
-except (InstallationError, OSError) as exc:
-    sys.exit(f"Installation ownership could not be saved: {exc}. Installation may be incomplete.")
+    destination = install_local(source, prefix, "posix")
+    version = current_version(destination)
+except (InstallationError, UpdateError, OSError, ValueError) as exc:
+    sys.exit(f"T+ installation error: {exc}")
+launcher = prefix / "bin" / "teka"
 print(f"T+ {version} installed in {destination}")
 print(f"Command: {launcher}")
 path_entries = [Path(p).expanduser().resolve() for p in os.environ.get("PATH", "").split(os.pathsep) if p]

@@ -202,7 +202,7 @@ teka uninstall --yes
 
 Only unchanged, recorded files are removed. Edited files, projects, update backups, other installed versions, editor plugins, and PATH entries are preserved. Removing an older version does not remove a newer version's launcher.
 
-This command is **not included in the published v0.9.0 downloads**. Source checkouts and legacy installations without ownership records are never automatically deleted. See [installation lifecycle](docs/INSTALLATION_LIFECYCLE.md) for migration and recovery limits.
+These ownership and recovery features are **not included in the published v0.9.0 downloads**. If a current source install is interrupted, rerun its installer from a fresh source folder outside the installation prefix. It restores the previous files before retrying, and stops if those files have since been edited. Source checkouts and legacy installations without ownership records are never automatically deleted. See [installation lifecycle](docs/INSTALLATION_LIFECYCLE.md) for recovery instructions and limits.
 
 ## IntelliJ IDEA
 

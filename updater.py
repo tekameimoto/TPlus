@@ -323,6 +323,19 @@ class Updater:
         }
 
     def install(self):
+        if (self.root / '.tplus-install.json').exists() or (self.root / '.tplus-install.json').is_symlink():
+            from project_tools import read_record, prefix_for, lifecycle_lock, recover_install, InstallationError
+            try:
+                record = read_record(self.root)
+                prefix = prefix_for(self.root, record['layout'])
+                with lifecycle_lock(prefix):
+                    recover_install(prefix)
+                    return self._install()
+            except InstallationError as exc:
+                raise UpdateError(str(exc)) from exc
+        return self._install()
+
+    def _install(self):
         release = self.release()
         status = self._status(release)
         if not status["available"]:
