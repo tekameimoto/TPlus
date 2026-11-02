@@ -327,6 +327,8 @@ class Updater:
             from project_tools import read_record, prefix_for, lifecycle_lock, recover_install, InstallationError
             try:
                 record = read_record(self.root)
+                if record is None:
+                    raise InstallationError('Installation changed before update. Re-run the installer, then retry.')
                 prefix = prefix_for(self.root, record['layout'])
                 with lifecycle_lock(prefix):
                     recover_install(prefix)

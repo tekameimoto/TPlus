@@ -182,6 +182,13 @@ p.install_local(source, prefix, layout)
             child.communicate(timeout=10)
         install.install_local(self.source, self.prefix, self.layout)
 
+    def test_update_handles_disappearing_ownership_record(self):
+        updater = Updater(self.root, self.base / 'plugin', self.base / 'config.json')
+        with patch.object(install, 'read_record', return_value=None):
+            with self.assertRaisesRegex(UpdateError, 'Installation changed'):
+                updater.install()
+        self.assertEqual(self.snapshot(), self.old)
+
     def test_preview_during_pending_recovery_does_not_write(self):
         self.crash()
         before = self.snapshot()
