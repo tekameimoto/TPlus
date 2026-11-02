@@ -4,7 +4,16 @@ plugins {
 }
 
 group = "dev.teka"
-version = "0.9.0"
+val compilerSource = file("../teka.py").readText()
+val releaseVersions = Regex("""(?m)^VERSION = ['"]([0-9]+\.[0-9]+\.[0-9]+)['"]$""")
+    .findAll(compilerSource).map { it.groupValues[1] }.toList()
+require(releaseVersions.size == 1) { "teka.py must define exactly one release version" }
+version = releaseVersions.single()
+
+tasks.withType<AbstractArchiveTask>().configureEach {
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+}
 
 repositories {
     mavenCentral()

@@ -87,6 +87,70 @@ jobs:
           distribution: temurin
           java-version: "25"
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
-      - name: Run plugin tests
-        run: ./gradlew test
+      - name: Run plugin tests and build distribution
+        run: ./gradlew test buildPlugin
         working-directory: intellij-plugin
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+      - name: Package and verify repeatability
+        run: |
+          python tools/package_release.py --plugin intellij-plugin/build/distributions/*.zip --output dist
+          python tools/package_release.py --plugin intellij-plugin/build/distributions/*.zip --output dist-repeat
+          diff -r dist dist-repeat
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-candidate
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  package-install:
+    name: Packaged install (${{ matrix.os }})
+    needs: [compiler, windows, intellij]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-candidate
+          path: candidate
+      - name: Verify and extract release
+        shell: python
+        run: |
+          from pathlib import Path
+          import zipfile
+          from tools.package_release import release_version, verify
+          version = release_version(Path.cwd())
+          verify(Path('candidate'), version)
+          with zipfile.ZipFile(f'candidate/TPlus-v{version}.zip') as archive:
+              archive.extractall('unpacked')
+      - name: Install packaged compiler (POSIX)
+        if: runner.os != 'Windows'
+        run: |
+          sh unpacked/compiler/install.sh --prefix "$RUNNER_TEMP/packaged teka"
+          "$RUNNER_TEMP/packaged teka/bin/teka" --version
+          "$RUNNER_TEMP/packaged teka/bin/teka" check examples/hello.teka
+          "$RUNNER_TEMP/packaged teka/bin/teka" uninstall --yes
+      - name: Install packaged compiler (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./unpacked/compiler/install.ps1 -Prefix "$env:RUNNER_TEMP/packaged teka" -NoPath
+          $teka = "$env:RUNNER_TEMP/packaged teka/bin/teka.cmd"
+          & $teka --version
+          if ($LASTEXITCODE -ne 0) { throw "Packaged launcher failed" }
+          & $teka check examples/hello.teka
+          if ($LASTEXITCODE -ne 0) { throw "Packaged compiler failed" }
+          & $teka uninstall --yes
+          if ($LASTEXITCODE -ne 0) { throw "Packaged uninstall failed" }
