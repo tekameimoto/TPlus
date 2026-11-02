@@ -9,12 +9,15 @@ import shutil
 import sys
 import tomllib
 import argparse
+import errno
+from contextlib import contextmanager
+import shlex
 import hashlib
 import json
 import os
 import stat
 import tempfile
-from updater import ALL_COMPILER
+from updater import ALL_COMPILER, UpdateError
 from standard_modules import MODULES
 
 
@@ -280,6 +283,20 @@ def record_update(root: Path, old: dict, names: list[str]):
 
 
 def uninstall(root: Path, apply: bool = False) -> dict:
+    root = root.absolute()
+    record = read_record(root)
+    if record is not None:
+        prefix = prefix_for(root, record['layout'])
+        if apply:
+            with lifecycle_lock(prefix):
+                recover_install(prefix)
+                return _uninstall(root, True)
+        if (prefix / TRANSACTION).exists():
+            raise InstallationError('An installation needs recovery. Re-run the installer before previewing removal.')
+    return _uninstall(root, apply)
+
+
+def _uninstall(root: Path, apply: bool = False) -> dict:
     """Preview by default. Only remove exact, unchanged files from this install."""
     root = root.absolute()
     record = read_record(root)
@@ -318,26 +335,330 @@ def uninstall(root: Path, apply: bool = False) -> dict:
             "path_unchanged": True}
 
 
+LOCK = '.tplus-lifecycle.lock'
+TRANSACTION = '.tplus-install-transaction'
+MAX_INSTALL_FILE = 20 * 1024 * 1024
+
+
+@contextmanager
+def lifecycle_lock(prefix: Path):
+    """OS lock releases on process exit; keep its inode for other contenders."""
+    plain_path(prefix / LOCK)
+    prefix.mkdir(parents=True, exist_ok=True)
+    fd = os.open(prefix / LOCK, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    acquired = False
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise InstallationError('Lifecycle lock must be a regular file')
+        if os.fstat(fd).st_size == 0:
+            os.write(fd, b'0')
+        os.lseek(fd, 0, os.SEEK_SET)
+        try:
+            if os.name == 'nt':
+                import msvcrt
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise InstallationError('Another T+ installation operation is running. Try again when it finishes.') from exc
+        acquired = True
+        yield
+    finally:
+        if acquired:
+            if os.name == 'nt':
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def sync_directory(path: Path):
+    if os.name != 'nt':
+        fd = os.open(path, os.O_RDONLY)
+        try:
+            try:
+                os.fsync(fd)
+            except OSError as exc:
+                if exc.errno not in {errno.EINVAL, errno.ENOTSUP}:
+                    raise
+        finally:
+            os.close(fd)
+
+
+def atomic_file(path: Path, data: bytes, mode: int = 0o644):
+    plain_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.teka-write-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+        sync_directory(path.parent)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def limited_bytes(path: Path) -> bytes:
+    plain_path(path)
+    if not path.is_file() or path.stat().st_size > MAX_INSTALL_FILE:
+        raise InstallationError(f'Invalid or oversized installation file: {path}')
+    with path.open('rb') as stream:
+        data = stream.read(MAX_INSTALL_FILE + 1)
+    if len(data) > MAX_INSTALL_FILE:
+        raise InstallationError('Installation file exceeds size limit')
+    return data
+
+
+def install_paths(layout: str, version: str) -> tuple[str, set[str]]:
+    if layout not in LAUNCHERS or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+        raise InstallationError('Invalid installation journal layout or version')
+    root = f'share/teka/{version}' if layout == 'posix' else version
+    return root, {f'{root}/{name}' for name in OWNED_FILES | {RECORD}} | {f'bin/{name}' for name in LAUNCHERS[layout]}
+
+
+def clean_transaction(prefix: Path):
+    """Delete only recognized work files; never recursively delete user files."""
+    stage = prefix / TRANSACTION
+    plain_path(stage)
+    if not stage.exists():
+        return
+    files, directories = [], []
+    for item in stage.iterdir():
+        plain_path(item)
+        if item.name in {'before', 'after'} and item.is_dir():
+            directories.append(item)
+            for blob in item.iterdir():
+                plain_path(blob)
+                if not blob.is_file() or not re.fullmatch(r'[0-9]{1,3}|\.teka-write-[A-Za-z0-9_-]+', blob.name):
+                    raise InstallationError('Unexpected recovery file; transaction retained for inspection')
+                files.append(blob)
+        elif item.is_file() and (item.name in {'owner', 'journal.json'} or re.fullmatch(r'\.teka-write-[A-Za-z0-9_-]+', item.name)):
+            files.append(item)
+        else:
+            raise InstallationError('Unexpected recovery file; transaction retained for inspection')
+    # Keep journal and ownership marker until work files/directories are gone.
+    for item in files:
+        if item.parent == stage and item.name in {'owner', 'journal.json'}:
+            continue
+        item.unlink()
+    for directory in directories:
+        directory.rmdir()
+    (stage / 'journal.json').unlink(missing_ok=True)
+    (stage / 'owner').unlink(missing_ok=True)
+    stage.rmdir()
+    sync_directory(prefix)
+
+
+def read_journal(prefix: Path) -> dict:
+    path = prefix / TRANSACTION / 'journal.json'
+    if path.stat().st_size > 64 * 1024:
+        raise InstallationError('Installation journal is too large')
+    try:
+        journal = json.loads(limited_bytes(path))
+        if type(journal['schema']) is not int or journal['schema'] != 1 or journal['state'] not in {'prepared', 'committed', 'rolled_back'}:
+            raise ValueError()
+        _, allowed = install_paths(journal['layout'], journal['version'])
+        entries = journal['entries']
+        if not isinstance(entries, list) or not 0 < len(entries) <= len(allowed):
+            raise ValueError()
+        seen = set()
+        for entry in entries:
+            if entry['path'] not in allowed or entry['path'] in seen:
+                raise ValueError()
+            seen.add(entry['path'])
+            for key in ('before', 'after'):
+                value = entry[key]
+                if key == 'before' and value is None:
+                    continue
+                if not isinstance(value, str) or not re.fullmatch('[0-9a-f]{64}', value):
+                    raise ValueError()
+            for key in ('old_mode', 'new_mode'):
+                if type(entry[key]) is not int or not 0 <= entry[key] <= 0o777:
+                    raise ValueError()
+    except (ValueError, KeyError, TypeError, UnicodeError) as exc:
+        raise InstallationError('Invalid installation journal; no recovery files were applied') from exc
+    return journal
+
+
+def recover_install(prefix: Path):
+    """Caller holds lifecycle_lock. Roll back only recognized, unchanged files."""
+    stage = prefix / TRANSACTION
+    plain_path(stage)
+    if not stage.exists():
+        return
+    owner = stage / 'owner'
+    if not owner.exists():
+        if not any(stage.iterdir()):
+            stage.rmdir()
+            return
+        raise InstallationError('Unrecognized recovery directory; nothing was overwritten')
+    if limited_bytes(owner) != b'T+ install transaction 1\n':
+        raise InstallationError('Unrecognized recovery directory; nothing was overwritten')
+    if not (stage / 'journal.json').exists():
+        # Preparation did not finish: installed files have not been touched.
+        clean_transaction(prefix)
+        return
+    journal = read_journal(prefix)
+    if journal['state'] in {'committed', 'rolled_back'}:
+        clean_transaction(prefix)
+        return
+    restores = []
+    for index, entry in enumerate(journal['entries']):
+        target = prefix / entry['path']
+        plain_path(target)
+        current = digest(target) if target.exists() else None
+        if current not in (entry['before'], entry['after']):
+            raise InstallationError(f'File changed after interrupted install: {target}. Recovery stopped; files were preserved.')
+        old = None
+        if entry['before'] is not None:
+            old = limited_bytes(stage / 'before' / str(index))
+            if hashlib.sha256(old).hexdigest() != entry['before']:
+                raise InstallationError('Recovery backup checksum mismatch; files were preserved')
+        restores.append((target, old, entry['old_mode']))
+    # Validate every file and backup before changing any destination.
+    for target, old, mode in restores:
+        if old is None:
+            target.unlink(missing_ok=True)
+            if target.parent.exists():
+                sync_directory(target.parent)
+        else:
+            atomic_file(target, old, mode)
+    root, _ = install_paths(journal['layout'], journal['version'])
+    try:
+        (prefix / root).rmdir()
+    except OSError:
+        pass
+    journal['state'] = 'rolled_back'
+    atomic_file(stage / 'journal.json', json.dumps(journal).encode(), 0o600)
+    clean_transaction(prefix)
+
+
+def apply_install(prefix: Path, layout: str, version: str, payload: dict[str, tuple[bytes, int]]):
+    """Caller holds lifecycle_lock and has validated ownership of destinations."""
+    _, allowed = install_paths(layout, version)
+    if not payload or not set(payload).issubset(allowed):
+        raise InstallationError('Unsupported installation destination')
+    stage = prefix / TRANSACTION
+    plain_path(stage)
+    stage.mkdir(mode=0o700)
+    try:
+        # Write the marker before creating any backup or changing installed files.
+        with (stage / 'owner').open('xb') as stream:
+            stream.write(b'T+ install transaction 1\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        entries = []
+        for index, (name, (data, mode)) in enumerate(payload.items()):
+            target = prefix / name
+            plain_path(target)
+            if len(data) > MAX_INSTALL_FILE:
+                raise InstallationError('Installation file exceeds size limit')
+            old = limited_bytes(target) if target.exists() else None
+            old_mode = stat.S_IMODE(target.stat().st_mode) & 0o777 if old is not None else 0o644
+            if old is not None:
+                atomic_file(stage / 'before' / str(index), old, 0o600)
+            atomic_file(stage / 'after' / str(index), data, 0o600)
+            entries.append({'path': name, 'before': hashlib.sha256(old).hexdigest() if old is not None else None,
+                            'after': hashlib.sha256(data).hexdigest(), 'old_mode': old_mode, 'new_mode': mode})
+        journal = {'schema': 1, 'state': 'prepared', 'layout': layout, 'version': version, 'entries': entries}
+        atomic_file(stage / 'journal.json', json.dumps(journal).encode(), 0o600)
+        sync_directory(stage)
+        sync_directory(prefix)
+        for index, entry in enumerate(entries):
+            data = limited_bytes(stage / 'after' / str(index))
+            if hashlib.sha256(data).hexdigest() != entry['after']:
+                raise InstallationError('Staged file checksum mismatch')
+            atomic_file(prefix / entry['path'], data, entry['new_mode'])
+        journal['state'] = 'committed'
+        atomic_file(stage / 'journal.json', json.dumps(journal).encode(), 0o600)
+    except BaseException:
+        # A hard process termination bypasses this; the next installer recovers.
+        recover_install(prefix)
+        raise
+    clean_transaction(prefix)
+
+
+def install_local(source: Path, prefix: Path, layout: str) -> Path:
+    from updater import current_version
+    source, prefix = source.resolve(), prefix.expanduser().resolve()
+    required = ['teka.py', 'python_style.py', 'standard_modules.py', 'project_tools.py', 'updater.py', 'TPLUS_HANDBOOK.md']
+    for name in required:
+        if not (source / name).is_file():
+            raise InstallationError(f'Incomplete T+ folder: missing {name}')
+    version = current_version(source)
+    relative, _ = install_paths(layout, version)
+    root = prefix / relative
+    extras = ['README.md', 'LICENSE', 'PRIVACY.md'] + (['install.sh', 'install.command'] if layout == 'posix' else ['install.ps1'])
+    files = {name: (limited_bytes(source / name), stat.S_IMODE((source / name).stat().st_mode) & 0o777)
+             for name in required + extras if (source / name).is_file()}
+    files['.tplus-install'] = (f'T+ {version}\n'.encode(), 0o644)
+    if layout == 'posix':
+        python, compiler, updater = map(shlex.quote, [sys.executable, str(root / 'teka.py'), str(root / 'updater.py')])
+        launcher = f'#!/bin/sh\n# TPlus launcher\nif [ "${{1:-}}" = update ]; then\n  shift\n  exec {python} {updater} "$@"\nfi\nexec {python} {compiler} "$@"\n'
+        launchers = {'teka': (launcher.encode(), 0o755)}
+    else:
+        code = 'from pathlib import Path\nimport runpy, sys\nroot = Path(__file__).resolve().parent\nargs = sys.argv[1:]\ntarget = "teka.py"\nif args and args[0] == "update":\n    target = "updater.py"\n    args = args[1:]\nsys.path.insert(0, str(root))\nsys.argv = [str(root / target)] + args\nrunpy.run_path(str(root / target), run_name="__main__")\n'
+        files['launcher.py'] = (code.encode(), 0o644)
+        manifest = json.dumps({'python': sys.executable, 'launcher': str(root / 'launcher.py')}).encode()
+        files['launcher.json'] = (manifest, 0o644)
+        python, entry = [s.replace('%', '%%') for s in (sys.executable, str(root / 'launcher.py'))]
+        command = f'@echo off\r\nrem TPlus launcher\r\n"{python}" "{entry}" %*\r\n'
+        launchers = {'teka.cmd': (command.encode(), 0o644), 'launcher.json': (manifest, 0o644)}
+    record = {'schema': 1, 'layout': layout,
+              'files': {name: hashlib.sha256(data).hexdigest() for name, (data, _) in files.items()},
+              'launchers': {name: hashlib.sha256(data).hexdigest() for name, (data, _) in launchers.items()}}
+    payload = {f'{relative}/{name}': value for name, value in files.items()}
+    payload[f'{relative}/{RECORD}'] = ((json.dumps(record, indent=2, sort_keys=True) + '\n').encode(), 0o600)
+    payload.update({f'bin/{name}': value for name, value in launchers.items()})
+    with lifecycle_lock(prefix):
+        if (prefix / TRANSACTION).exists() and source.is_relative_to(prefix):
+            raise InstallationError('Use a fresh source folder outside the installation prefix to recover this interrupted install.')
+        recover_install(prefix)
+        preflight(root, layout, list(files))
+        if root.exists() and not (root / '.tplus-install').is_file():
+            raise InstallationError(f'{root} is not marked as a T+ installation. Choose another prefix.')
+        launcher = prefix / 'bin' / ('teka' if layout == 'posix' else 'teka.cmd')
+        marker = '# TPlus launcher' if layout == 'posix' else 'rem TPlus launcher'
+        if launcher.exists() and marker not in launcher.read_text(encoding='utf-8', errors='replace'):
+            raise InstallationError(f'Another command already exists at {launcher}. Choose another prefix.')
+        apply_install(prefix, layout, version, payload)
+    return root
+
+
 def cli(argv=None):
-    parser = argparse.ArgumentParser(description="T+ local installation ownership")
-    parser.add_argument("action", choices=["preflight", "record", "uninstall"])
-    parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--layout", choices=LAUNCHERS, default="posix")
-    parser.add_argument("--files", nargs="*", default=[])
-    parser.add_argument("--yes", action="store_true")
+    parser = argparse.ArgumentParser(description='T+ local installation management')
+    parser.add_argument('action', choices=['preflight', 'record', 'uninstall', 'install'])
+    parser.add_argument('--root', type=Path)
+    parser.add_argument('--prefix', type=Path)
+    parser.add_argument('--source', type=Path)
+    parser.add_argument('--layout', choices=LAUNCHERS, default='posix')
+    parser.add_argument('--files', nargs='*', default=[])
+    parser.add_argument('--yes', action='store_true')
     args = parser.parse_args(argv)
     try:
-        if args.action == "preflight":
-            preflight(args.root, args.layout, args.files)
-        elif args.action == "record":
-            record_install(args.root, args.layout, args.files)
+        if args.action == 'install':
+            if args.source is None or args.prefix is None:
+                parser.error('install requires --source and --prefix')
+            print(install_local(args.source, args.prefix, args.layout))
         else:
-            print(json.dumps(uninstall(args.root, args.yes)))
+            if args.root is None:
+                parser.error('--root is required')
+            if args.action == 'preflight':
+                preflight(args.root, args.layout, args.files)
+            elif args.action == 'record':
+                record_install(args.root, args.layout, args.files)
+            else:
+                print(json.dumps(uninstall(args.root, args.yes)))
         return 0
-    except (InstallationError, OSError) as exc:
-        print(f"T+ installation error: {exc}", file=sys.stderr)
+    except (InstallationError, UpdateError, OSError, ValueError) as exc:
+        print(f'T+ installation error: {exc}', file=sys.stderr)
         return 1
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(cli())

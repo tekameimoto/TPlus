@@ -1,6 +1,6 @@
-# Installation ownership and removal
+# Installation, recovery, and removal
 
-This describes the first distribution improvement after Phase A. It applies to installations made with the source installers on this branch. The published v0.9.0 ZIP and download commands have not been replaced.
+This applies to installations made with the current source installers. The published v0.9.0 ZIP and download commands have not been replaced and do not include these recovery features.
 
 ## Install and reinstall
 
@@ -49,10 +49,23 @@ A marked legacy installation can be registered by reinstalling with the current 
 
 The original development checkout is not migrated or deleted automatically. No release is published by these operations.
 
-## Recovery limits and next work
+## Recover an interrupted source install
 
-The ownership record is written with a temporary file and atomic replacement, but the complete installer and uninstaller are not yet atomic transactions. A filesystem error, concurrent install/update/uninstall, or power loss can leave a partial operation. Do not run lifecycle operations concurrently. An interrupted uninstall retains its record when a deletion fails; reinstalling or recovering may still be necessary if compiler files were already removed.
+Both source installers stage their files and save the previous contents before replacing the compiler, ownership record, or launchers. A journal in `<prefix>/.tplus-install-transaction` records the operation. Each file is replaced atomically. A caught failure rolls back; an abrupt process exit leaves the journal for the next run.
 
-If installation fails after copying begins, preserve the directory and check the error before retrying. A stale ownership record can cause preflight to reject partially changed files. Choose a fresh prefix to regain a working command without deleting the failed installation.
+1. Keep the installation and its recovery directory intact.
+2. Extract or check out a fresh copy of this source **outside the installation prefix**.
+3. Run its installer with the same prefix as before. For macOS/Linux: `sh install.sh --prefix /path/to/prefix`. For Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Prefix C:\path\to\prefix`.
+4. Check `teka --version` after it succeeds.
 
-The next distribution PR should add a shared lifecycle lock, durable recovery journal, staged replacement, and interruption tests. Then add maintained release packaging, verified installation artifacts, and package-manager integration. These remain unfinished; this PR establishes safe file ownership and explicit removal first.
+Before retrying, the installer validates every affected file and backup, then restores an unfinished operation. If the previous operation already committed, it only finishes cleanup. Recovery also tolerates an interruption during rollback. Changed destination files, corrupt backups, unsafe paths, or unexpected recovery files stop recovery for inspection. Preserve those files; do not delete the journal to force an overwrite. A separate prefix can restore a usable command while you investigate.
+
+Source installation, owned updates, and applied uninstall share an OS lock in `<prefix>/.tplus-lifecycle.lock`. A competing operation exits with an error. The OS releases the lock when its process exits, including an abrupt termination. The small file remains intentionally; do not delete it while an operation is running. Uninstall preview is read-only and refuses a pending installation recovery.
+
+## Limits and next work
+
+This recovery journal covers **source installation**. Updates retain their existing caught-error rollback, and uninstall still removes files individually; neither has a complete process-death recovery journal. Legacy updaters without ownership records do not use the new lock. Reinstall from fresh source may be necessary after an interrupted update or uninstall.
+
+There is no single atomic switch for the whole compiler: avoid compiling while installation runs. Windows PATH changes happen after the file transaction and are outside rollback. A process killed while writing an individual temporary file can leave a `.teka-write-*` file beside its destination; unknown files are preserved. Tests cover exceptions and process termination, not all filesystem, hardware, or power-loss failures. Recovery is local bookkeeping, not a security boundary against another process with the same account permissions.
+
+Maintained release packaging, verified installation artifacts, and package-manager integration remain future distribution work.
